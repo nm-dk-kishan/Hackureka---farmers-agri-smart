@@ -30,10 +30,11 @@
           <div>
             <label>Crop</label>
             <select id="cropSelect" required>
-              <option value="">Select crop</option>
-              <option value="wheat">Wheat</option>
-              <option value="rice">Rice</option>
-              <option value="tomato">Tomato</option>
+              <option value="Wheat">Wheat</option>
+              <option value="Millet">Millet</option>
+              <option value="Sunflower">Sunflower</option>
+              <option value="Cotton">Cotton</option>
+              <option value="Maize">Maize</option>
             </select>
           </div>
           <div>
@@ -58,8 +59,26 @@
           <canvas id="priceForecast"></canvas>
         </div>
         <div class="card" style="background:linear-gradient(to bottom,#fafcf8,#ffffff);border-left:4px solid #2e7d32">
-          <h3 style="margin-top:0;border-bottom:2px solid #2e7d32;padding-bottom:12px;color:#1a3a1a">📊 Demand Forecast</h3>
-          <canvas id="demandForecast"></canvas>
+          <h3 style="margin-top:0;border-bottom:2px solid #2e7d32;padding-bottom:12px;color:#1a3a1a">📊 15-Day Price Prediction</h3>
+          <canvas id="fifteenDayForecast"></canvas>
+        </div>
+      </div>
+
+      <!-- 15-day predictions table -->
+      <div class="card" style="margin-top:12px;">
+        <h3 style="margin-top:0;border-bottom:2px solid #2e7d32;padding-bottom:12px;color:#1a3a1a">📅 Next 15 Days — Predicted Prices</h3>
+        <div style="overflow:auto">
+          <table style="width:100%;border-collapse:collapse;">
+            <thead>
+              <tr style="text-align:left;background:#f1f8ed;border-bottom:1px solid #e0e0e0">
+                <th style="padding:8px">Date</th>
+                <th style="padding:8px">Predicted Price (₹)</th>
+              </tr>
+            </thead>
+            <tbody id="fifteenDayTableBody">
+              <tr><td colspan="2" style="padding:12px;color:#666;text-align:center">Run prediction to see the next 15 days</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
 

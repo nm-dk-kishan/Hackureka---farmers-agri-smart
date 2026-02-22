@@ -1,6 +1,6 @@
 try { ensureAuth() } catch(e) { console.error('Auth failed:', e); location.href='auth.html' }
 
-let priceChart, demandChart, riskChart, nutrientChart
+let priceChart, fifteenChart, riskChart, nutrientChart
 
 // Data
 const cropData = {
@@ -71,21 +71,26 @@ function switchTab(tabName) {
 function initCharts() {
   try {
     const pfCtx = document.getElementById('priceForecast')
-    const dfCtx = document.getElementById('demandForecast')
-    
-    if (!pfCtx || !dfCtx) { console.error('Chart containers not found'); return }
+    const ffCtx = document.getElementById('fifteenDayForecast')
+
+    if (!pfCtx || !ffCtx) { console.error('Chart containers not found'); return }
 
     priceChart = new Chart(pfCtx, {
       type:'line',
       data:{labels:['Jan','Feb','Mar','Apr','May','Jun'], datasets:[{label:'Price',data:[2100,2300,2500,2400,2600,2800], borderColor:'#2e7d32', backgroundColor:'rgba(46,125,50,0.06)', tension: 0.4}]},
       options:{plugins:{legend:{display:false}}, scales: {y: {beginAtZero: false}}}
     })
-    demandChart = new Chart(dfCtx, {
-      type:'line',
-      data:{labels:['Jan','Feb','Mar','Apr','May','Jun'], datasets:[{label:'Demand',data:[60,70,90,80,95,98],borderColor:'#4caf50',backgroundColor:'rgba(76,175,80,0.08)', tension: 0.4}]},
-      options:{plugins:{legend:{display:false}}, scales: {y: {beginAtZero: false}}}
-    })
     
+    // placeholder fifteen-day chart (updated when server returns predictions)
+    fifteenChart = new Chart(ffCtx, {
+      type: 'line',
+      data: {
+        labels: ['Day 1','Day 2','Day 3','Day 4','Day 5','Day 6'],
+        datasets: [{ label: '15-Day Price', data: [0,0,0,0,0,0], borderColor: '#2e7d32', backgroundColor: 'rgba(46,125,50,0.06)', tension: 0.4 }]
+      },
+      options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: false } } }
+    })
+
     populateCropData()
     initRiskChart()
     initNutrientChart()
@@ -93,6 +98,85 @@ function initCharts() {
     console.error('Chart init error:', e)
     toast('Failed to initialize charts', 3000)
   }
+}
+
+//15DAYSFORECAST
+async function load15DayPrediction(cropName, startDate) {
+  try {
+
+    let url = `http://127.0.0.1:5000/predict?crop=${encodeURIComponent(cropName)}&t=${new Date().getTime()}`
+    if (startDate) url += `&start_date=${encodeURIComponent(startDate)}`
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error("Server error");
+    }
+
+    const data = await response.json();
+
+    const labels = [];
+    const prices = [];
+
+    data.forEach(item => {
+      labels.push(item.date);
+      prices.push(item.predicted_price);
+    });
+
+    draw15DayChart(labels, prices);
+    populateFifteenDayTable(data);
+
+  } catch (error) {
+    console.error("15-day prediction error:", error);
+    toast("Unable to load 15-day prediction", 3000);
+  }
+}
+
+function populateFifteenDayTable(data) {
+  try {
+    const tbody = document.getElementById('fifteenDayTableBody')
+    if (!tbody) return
+    tbody.innerHTML = ''
+
+    if (!Array.isArray(data) || data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="2" style="padding:12px;color:#666;text-align:center">No prediction data</td></tr>'
+      return
+    }
+
+    data.forEach(item => {
+      const tr = document.createElement('tr')
+      tr.innerHTML = `<td style="padding:8px;border-bottom:1px solid #eee">${item.date}</td><td style="padding:8px;border-bottom:1px solid #eee">${item.predicted_price}</td>`
+      tbody.appendChild(tr)
+    })
+  } catch(e) {
+    console.error('Populate table error:', e)
+  }
+}
+
+function draw15DayChart(labels, prices) {
+
+  const ctx = document.getElementById('fifteenDayForecast');
+  if (!ctx) return;
+
+  if (fifteenChart) fifteenChart.destroy();
+
+  fifteenChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: '15-Day Price',
+        data: prices,
+        borderColor: '#2e7d32', // SAME THEME COLOR
+        backgroundColor: 'rgba(46,125,50,0.06)', // SAME STYLE AS FIRST CHART
+        tension: 0.4
+      }]
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: false } }
+    }
+  });
 }
 
 function initRiskChart() {
@@ -241,11 +325,11 @@ function runPrediction(){
     if(!location) { toast('Please select a location', 3000); return }
     if(!date) { toast('Please select a harvest date', 3000); return }
     
-    if(!priceChart || !demandChart) { toast('Charts not initialized', 3000); return }
+    if(!priceChart || !fifteenChart) { toast('Charts not initialized', 3000); return }
     
     priceChart.data.datasets[0].data = priceChart.data.datasets[0].data.map(v=>Math.round(v*(0.95 + Math.random()*0.1)))
-    demandChart.data.datasets[0].data = demandChart.data.datasets[0].data.map(v=>Math.round(v*(0.9 + Math.random()*0.2)))
-    priceChart.update(); demandChart.update()
+    fifteenChart.data.datasets[0].data = fifteenChart.data.datasets[0].data.map(v=>Math.round(v*(0.9 + Math.random()*0.2)))
+    priceChart.update(); load15DayPrediction(crop, date);
     toast('Prediction complete for ' + crop)
   } catch(e) {
     console.error('Prediction error:', e)
