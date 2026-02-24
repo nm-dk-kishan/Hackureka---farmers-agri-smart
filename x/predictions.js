@@ -1,6 +1,6 @@
 try { ensureAuth() } catch(e) { console.error('Auth failed:', e); location.href='auth.html' }
 
-let priceChart, fifteenChart, riskChart, nutrientChart
+let liveMarketChart, fifteenChart, riskChart, nutrientChart
 
 // Data
 const cropData = {
@@ -47,6 +47,14 @@ const riskData = {
   }
 }
 
+const fixedMspByCrop = {
+  wheat: 2174,
+  millet: 2900,
+  sunflower: 4000,
+  cotton: 5000,
+  maize: 1300
+}
+
 function switchTab(tabName) {
   // Hide all tabs
   document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none')
@@ -70,17 +78,10 @@ function switchTab(tabName) {
 
 function initCharts() {
   try {
-    const pfCtx = document.getElementById('priceForecast')
     const ffCtx = document.getElementById('fifteenDayForecast')
 
-    if (!pfCtx || !ffCtx) { console.error('Chart containers not found'); return }
-
-    priceChart = new Chart(pfCtx, {
-      type:'line',
-      data:{labels:['Jan','Feb','Mar','Apr','May','Jun'], datasets:[{label:'Price',data:[2100,2300,2500,2400,2600,2800], borderColor:'#2e7d32', backgroundColor:'rgba(46,125,50,0.06)', tension: 0.4}]},
-      options:{plugins:{legend:{display:false}}, scales: {y: {beginAtZero: false}}}
-    })
-    
+    if (!ffCtx) { console.error('Chart containers not found'); return }
+ 
     // placeholder fifteen-day chart (updated when server returns predictions)
     fifteenChart = new Chart(ffCtx, {
       type: 'line',
@@ -98,6 +99,131 @@ function initCharts() {
     console.error('Chart init error:', e)
     toast('Failed to initialize charts', 3000)
   }
+}
+
+async function fetchLiveMarketPrice(crop, state) {
+  try {
+    const toNumber = (value) => {
+      const n = Number(String(value ?? '').replace(/[^0-9.-]/g, ''))
+      return Number.isFinite(n) ? n : 0
+    }
+    const parseDate = (value) => {
+      const raw = String(value || '').trim()
+      if (!raw) return new Date(0)
+      const d = new Date(raw)
+      if (!Number.isNaN(d.getTime())) return d
+      const m = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+      if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]))
+      return new Date(0)
+    }
+    const norm = (v) => String(v || '').trim().toLowerCase()
+
+    const url = `https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070?api-key=579b464db66ec23bdd00000191ff622c3533490d64d039d1a1cfd06b&format=json&limit=10000`
+    const response = await fetch(url)
+    const result = await response.json()
+
+    if (!result.records) {
+      toast("No market data found", 3000)
+      return
+    }
+
+    // Market records may contain commodity variants; use includes for stable matching.
+    const records = result.records.filter(item =>
+      norm(item.commodity).includes(norm(crop)) &&
+      norm(item.state) === norm(state)
+    )
+
+    if (records.length === 0) {
+      toast("No matching market data", 3000)
+      return
+    }
+
+    // Sort latest first
+    records.sort((a, b) => parseDate(b.arrival_date) - parseDate(a.arrival_date))
+
+    // Current date + 3 previous unique dates
+    const uniqueByDate = new Map()
+    for (const rec of records) {
+      const dateKey = String(rec.arrival_date || '').trim()
+      if (!dateKey) continue
+      if (!uniqueByDate.has(dateKey)) uniqueByDate.set(dateKey, rec)
+      if (uniqueByDate.size >= 4) break
+    }
+
+    const last4 = Array.from(uniqueByDate.values()).reverse()
+    const labels = last4.map(r => r.arrival_date)
+    const prices = last4.map(r => toNumber(r.modal_price))
+    const msp = fixedMspByCrop[norm(crop)] ?? 0
+
+    drawLiveMarketChart(labels, prices, msp)
+
+  } catch (err) {
+    console.error("Live market error:", err)
+    toast("Error fetching live market data", 3000)
+  }
+}
+
+function drawLiveMarketChart(labels, prices, msp) {
+
+  const ctx = document.getElementById('liveMarketChart')
+  if (!ctx) return
+
+  if (liveMarketChart) liveMarketChart.destroy()
+
+  const mspValue = Number(msp || 0)
+  const mspLinePlugin = {
+    id: 'mspLinePlugin',
+    afterDatasetsDraw(chart) {
+      const yScale = chart.scales.y
+      if (!yScale) return
+
+      const y = yScale.getPixelForValue(mspValue)
+      const { left, right } = chart.chartArea
+      const c = chart.ctx
+
+      c.save()
+      c.beginPath()
+      c.setLineDash([6, 6])
+      c.lineWidth = 3
+      c.strokeStyle = '#ff6f00'
+      c.moveTo(left, y)
+      c.lineTo(right, y)
+      c.stroke()
+      c.restore()
+    }
+  }
+
+  liveMarketChart = new Chart(ctx, {
+    type: 'bar',
+    plugins: [mspLinePlugin],
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          type: 'bar',
+          label: 'Market Price',
+          data: prices.map(p => Number(p || 0)),
+          borderColor: '#2e7d32',
+          backgroundColor: 'rgba(46,125,50,0.35)',
+          borderWidth: 1
+        },
+        {
+          type: 'line',
+          label: 'MSP',
+          data: new Array(labels.length).fill(mspValue),
+          borderColor: '#ff6f00',
+          backgroundColor: '#ff6f00',
+          borderDash: [6,6],
+          borderWidth: 2,
+          pointRadius: 0
+        }
+      ]
+    },
+    options: {
+      plugins: { legend: { display: true } },
+      scales: { y: { beginAtZero: false } }
+    }
+  })
 }
 
 //15DAYSFORECAST
@@ -325,12 +451,19 @@ function runPrediction(){
     if(!location) { toast('Please select a location', 3000); return }
     if(!date) { toast('Please select a harvest date', 3000); return }
     
-    if(!priceChart || !fifteenChart) { toast('Charts not initialized', 3000); return }
-    
-    priceChart.data.datasets[0].data = priceChart.data.datasets[0].data.map(v=>Math.round(v*(0.95 + Math.random()*0.1)))
-    fifteenChart.data.datasets[0].data = fifteenChart.data.datasets[0].data.map(v=>Math.round(v*(0.9 + Math.random()*0.2)))
-    priceChart.update(); load15DayPrediction(crop, date);
+    if(!fifteenChart) { 
+      toast('Charts not initialized', 3000); 
+      return 
+    }
+
+    // ✅ FETCH LIVE MARKET DATA
+    fetchLiveMarketPrice(crop, location);
+
+    // ✅ LOAD 15 DAY PREDICTION
+    load15DayPrediction(crop, date);
+
     toast('Prediction complete for ' + crop)
+
   } catch(e) {
     console.error('Prediction error:', e)
     toast('Failed to run prediction', 3000)

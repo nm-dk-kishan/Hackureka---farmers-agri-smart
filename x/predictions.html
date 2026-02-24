@@ -16,10 +16,10 @@
       
       <!-- Tab Navigation -->
       <div style="display:flex;gap:12px;margin-top:16px;border-bottom:3px solid #e0e0e0;padding-bottom:0px;overflow-x:auto">
-        <button class="tab-btn active" onclick="switchTab('market')" style="border-bottom:3px solid #2e7d32;color:#2e7d32">📈 Market & Price</button>
-        <button class="tab-btn" onclick="switchTab('crop')">🌱 Crop & Seed</button>
-        <button class="tab-btn" onclick="switchTab('risk')">⚠️ Risk</button>
-        <button class="tab-btn" onclick="switchTab('resource')">💧 Resource</button>
+        <button class="tab-btn active" onclick="switchTab('market', event)" style="border-bottom:3px solid #2e7d32;color:#2e7d32">📈 Market & Price</button>
+        <button class="tab-btn" onclick="switchTab('crop', event)">🌱 Crop & Seed</button>
+        <button class="tab-btn" onclick="switchTab('risk', event)">⚠️ Risk</button>
+        <button class="tab-btn" onclick="switchTab('resource', event)">💧 Resource</button>
       </div>
     </div>
 
@@ -41,8 +41,11 @@
             <label>Location</label>
             <select id="locSelect" required>
               <option value="">Select location</option>
-              <option value="indore">Indore (MP)</option>
-              <option value="ludhiana">Ludhiana (Punjab)</option>
+              <option value="Maharashtra">Jalgaon (Maharashtra)</option>
+              <option value="Karnataka">Raichur (Karnataka)</option>
+              <option value="Rajasthan">Ganganagar (Rajasthan)</option>
+              <option value="Gujarat">Jamnagar (Gujarat)</option>
+              <option value="Madhya Pradesh">Jabalpur (Madhya Pradesh)</option>
             </select>
           </div>
           <div>
@@ -55,8 +58,11 @@
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
       <div class="card" style="background:linear-gradient(to bottom,#fafcf8,#ffffff);border-left:4px solid #2e7d32">
-        <h3 style="margin-top:0;border-bottom:2px solid #2e7d32;padding-bottom:12px;color:#1a3a1a">📊 Price Forecast <span class="badge" style="background:#4caf50;color:white">87% confidence</span></h3>
-          <canvas id="priceForecast"></canvas>
+        <h3 style="margin-top:0;border-bottom:2px solid #2e7d32;padding-bottom:12px;color:#1a3a1a">
+          📊 Live Market Price
+          <span class="badge" style="background:#4caf50;color:white">Live Data</span>
+        </h3>
+        <canvas id="liveMarketChart"></canvas>
         </div>
         <div class="card" style="background:linear-gradient(to bottom,#fafcf8,#ffffff);border-left:4px solid #2e7d32">
           <h3 style="margin-top:0;border-bottom:2px solid #2e7d32;padding-bottom:12px;color:#1a3a1a">📊 15-Day Price Prediction</h3>
