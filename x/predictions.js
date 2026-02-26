@@ -1,26 +1,9 @@
-try { ensureAuth() } catch(e) { console.error('Auth failed:', e); location.href='auth.html' }
+﻿try { ensureAuth() } catch(e) { console.error('Auth failed:', e); location.href='auth.html' }
 
 let liveMarketChart, fifteenChart, riskChart, nutrientChart
 
-// Data
-const cropData = {
-  wheat: {
-    suitability: { Wheat: 92, Rice: 78, Mustard: 85, Sugarcane: 60 },
-    seeds: [
-      { name: 'HD-2067', type: 'Wheat - Kathi', yield: 'High Yield' },
-      { name: 'PBW-343', type: 'Wheat - Rabi', yield: 'Medium Yield' },
-      { name: 'Pusa Basmati', type: 'Rice - Kharif', yield: 'Premium Yield' }
-    ]
-  },
-  rice: {
-    suitability: { Rice: 95, Wheat: 75, Sugarcane: 70, Tomato: 60 },
-    seeds: [
-      { name: 'PB1121', type: 'Rice - Basmati', yield: 'Premium Yield' },
-      { name: 'PR106', type: 'Rice - Parboiled', yield: 'High Yield' },
-      { name: 'IR64', type: 'Rice - Long grain', yield: 'Medium Yield' }
-    ]
-  }
-}
+let cropSeedRequestInFlight = false
+const cropSeedApiUrl = 'http://127.0.0.1:5001/ask'
 
 const riskData = {
   wheat: {
@@ -30,8 +13,8 @@ const riskData = {
       { risk: 'Medium', issue: 'Rust fungus possibility', action: 'Use fungicide spray at flowering stage. Ensure proper spacing' }
     ],
     chemicals: [
-      'Imidacloprid 17.8% SL — 0.3ml/l for aphids',
-      'Propiconazole 25% EC — 1ml/l for rust'
+      'Imidacloprid 17.8% SL - 0.3ml/l for aphids',
+      'Propiconazole 25% EC - 1ml/l for rust'
     ]
   },
   rice: {
@@ -41,8 +24,8 @@ const riskData = {
       { risk: 'Medium', issue: 'Stem borer activity', action: 'Use pheromone traps. Monitor crop regularly' }
     ],
     chemicals: [
-      'Carbendazim 50% WP — 1g/l for blast',
-      'Fipronil 5% SC — 1.5ml/l for borers'
+      'Carbendazim 50% WP - 1g/l for blast',
+      'Fipronil 5% SC - 1.5ml/l for borers'
     ]
   }
 }
@@ -55,7 +38,7 @@ const fixedMspByCrop = {
   maize: 1300
 }
 
-function switchTab(tabName) {
+function switchTab(tabName, evt) {
   // Hide all tabs
   document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none')
   document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'))
@@ -64,15 +47,8 @@ function switchTab(tabName) {
   const tab = document.getElementById(tabName + '-tab')
   if (tab) {
     tab.style.display = 'block'
-    event.target.classList.add('active')
-  }
-  
-  // Initialize charts when tabs are switched
-  if (tabName === 'risk' && !riskChart) {
-    setTimeout(initRiskChart, 100)
-  }
-  if (tabName === 'resource' && !nutrientChart) {
-    setTimeout(initNutrientChart, 100)
+    const activeBtn = evt?.target || document.querySelector(`.tab-btn[onclick*="'${tabName}'"]`)
+    if (activeBtn) activeBtn.classList.add('active')
   }
 }
 
@@ -92,7 +68,8 @@ function initCharts() {
       options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: false } } }
     })
 
-    populateCropData()
+    populateStaticSections()
+    bindCropSeedEvents()
     initRiskChart()
     initNutrientChart()
   } catch(e) {
@@ -305,6 +282,122 @@ function draw15DayChart(labels, prices) {
   });
 }
 
+function setCropSeedLoading(loading, errorText = '') {
+  const loadingEl = document.getElementById('cropSeedLoading')
+  const errorEl = document.getElementById('cropSeedError')
+  const buttonEl = document.getElementById('cropSeedPredictBtn')
+  if (loadingEl) loadingEl.style.display = loading ? 'inline' : 'none'
+  if (errorEl) {
+    errorEl.textContent = errorText
+    errorEl.style.display = errorText ? 'inline' : 'none'
+  }
+  if (buttonEl) buttonEl.disabled = loading
+}
+
+function getCropSeedInputs() {
+  const nitrogen = Number(document.getElementById('nitrogen')?.value)
+  const phosphorus = Number(document.getElementById('phosphorus')?.value)
+  const potassium = Number(document.getElementById('potassium')?.value)
+  const crop = String(document.getElementById('seedCropSelect')?.value || 'Wheat').trim() || 'Wheat'
+
+  return { nitrogen, phosphorus, potassium, crop }
+}
+
+function renderCropSuitability(items) {
+  const suitDiv = document.getElementById('cropSuitability')
+  if (!suitDiv) return
+  if (!Array.isArray(items) || items.length === 0) {
+    suitDiv.innerHTML = '<div class="muted">No crop suitability data available.</div>'
+    return
+  }
+
+  let html = ''
+  items.forEach(item => {
+    const crop = String(item.crop || '').trim() || 'Unknown Crop'
+    const pct = Math.max(0, Math.min(100, Number(item.percentage) || 0))
+    html += `<div class="crop-suit-item">
+      <div class="crop-suit-name"><span>${crop}</span><span>${pct}%</span></div>
+      <div class="crop-suit-bar"><div class="crop-suit-fill" style="width:${pct}%"></div></div>
+    </div>`
+  })
+  suitDiv.innerHTML = html
+}
+
+function renderSeedVarieties(items) {
+  const seedDiv = document.getElementById('seedVarieties')
+  if (!seedDiv) return
+  if (!Array.isArray(items) || items.length === 0) {
+    seedDiv.innerHTML = '<div class="muted">No seed recommendations available.</div>'
+    return
+  }
+
+  let html = ''
+  items.forEach(seed => {
+    const name = String(seed.name || '').trim() || 'Unnamed Variety'
+    const crop = String(seed.crop || '').trim()
+    const season = String(seed.season || '').trim()
+    const yieldType = String(seed.yield_type || '').trim() || 'Recommended'
+    const subtitle = [crop, season].filter(Boolean).join(' - ')
+    html += `<div class="seed-item">
+      <div class="seed-name">${name}</div>
+      <div class="seed-type">${subtitle || 'Crop/season details unavailable'}</div>
+      <span class="seed-badge">${yieldType}</span>
+    </div>`
+  })
+  seedDiv.innerHTML = html
+}
+
+function renderCropAdvice(advice) {
+  const adviceDiv = document.getElementById('cropAdvice')
+  if (!adviceDiv) return
+  const text = String(advice || '').trim()
+  adviceDiv.textContent = text || 'No agronomic advice available.'
+}
+
+async function handleCropPrediction(showValidationToast = true) {
+  if (cropSeedRequestInFlight) return
+
+  const payload = getCropSeedInputs()
+  if (!Number.isFinite(payload.nitrogen) || !Number.isFinite(payload.phosphorus) || !Number.isFinite(payload.potassium)) {
+    setCropSeedLoading(false, 'Please provide valid N, P, K values.')
+    if (showValidationToast) toast('Enter valid N, P, K values', 2500)
+    return
+  }
+
+  cropSeedRequestInFlight = true
+  setCropSeedLoading(true, '')
+  try {
+    const response = await fetch(cropSeedApiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        soil_data: {
+          Nitrogen: payload.nitrogen,
+          Phosphorus: payload.phosphorus,
+          Potassium: payload.potassium
+        },
+        crop: payload.crop
+      })
+    })
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.error || 'AI request failed')
+
+    renderCropSuitability(data.crop_suitability)
+    renderSeedVarieties(data.recommended_seeds)
+    renderCropAdvice(data.advice)
+    setCropSeedLoading(false, '')
+  } catch (error) {
+    console.error('Crop/seed prediction error:', error)
+    setCropSeedLoading(false, 'Unable to fetch AI recommendations right now.')
+    renderCropSuitability([])
+    renderSeedVarieties([])
+    renderCropAdvice('Unable to generate advice at this time. Please try again.')
+    toast('Crop & Seed recommendation failed', 3000)
+  } finally {
+    cropSeedRequestInFlight = false
+  }
+}
+
 function initRiskChart() {
   try {
     const ctx = document.getElementById('riskChart')
@@ -369,35 +462,11 @@ function initNutrientChart() {
   }
 }
 
-function populateCropData() {
+function populateStaticSections() {
   try {
-    // Populate crop suitability
-    const suitDiv = document.getElementById('cropSuitability')
-    if (suitDiv) {
-      const suits = cropData.wheat.suitability
-      let html = ''
-      for (let [crop, pct] of Object.entries(suits)) {
-        html += `<div class="crop-suit-item">
-          <div class="crop-suit-name"><span>${crop}</span><span>${pct}%</span></div>
-          <div class="crop-suit-bar"><div class="crop-suit-fill" style="width:${pct}%"></div></div>
-        </div>`
-      }
-      suitDiv.innerHTML = html
-    }
-
-    // Populate seed varieties
-    const seedDiv = document.getElementById('seedVarieties')
-    if (seedDiv) {
-      let html = ''
-      cropData.wheat.seeds.forEach(seed => {
-        html += `<div class="seed-item">
-          <div class="seed-name">${seed.name}</div>
-          <div class="seed-type">${seed.type}</div>
-          <span class="seed-badge">${seed.yield}</span>
-        </div>`
-      })
-      seedDiv.innerHTML = html
-    }
+    renderCropSuitability([])
+    renderSeedVarieties([])
+    renderCropAdvice('Enter NPK values, then run prediction.')
 
     // Populate prevention suggestions
     const prevDiv = document.getElementById('preventionSuggestions')
@@ -417,7 +486,7 @@ function populateCropData() {
     if (chemDiv) {
       let html = ''
       riskData.wheat.chemicals.forEach(chem => {
-        html += `<div>• ${chem}</div>`
+        html += `<div>- ${chem}</div>`
       })
       chemDiv.innerHTML = html
     }
@@ -441,6 +510,13 @@ function populateCropData() {
   }
 }
 
+function bindCropSeedEvents() {
+  const predictBtn = document.getElementById('cropSeedPredictBtn')
+  if (predictBtn) {
+    predictBtn.addEventListener('click', () => handleCropPrediction(true))
+  }
+}
+
 function runPrediction(){
   try {
     const crop = document.getElementById('cropSelect')?.value
@@ -456,11 +532,12 @@ function runPrediction(){
       return 
     }
 
-    // ✅ FETCH LIVE MARKET DATA
+    // Fetch live market data
     fetchLiveMarketPrice(crop, location);
 
-    // ✅ LOAD 15 DAY PREDICTION
+    // Load 15-day prediction
     load15DayPrediction(crop, date);
+    handleCropPrediction(false)
 
     toast('Prediction complete for ' + crop)
 
@@ -486,3 +563,5 @@ function savePrediction(){
 }
 
 document.addEventListener('DOMContentLoaded', initCharts)
+
+

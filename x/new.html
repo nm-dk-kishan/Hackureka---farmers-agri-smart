@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Crop Advisor AI</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 30px;
+            background-color: #f9f9f9;
+        }
+
+        h2 {
+            color: #2e7d32;
+        }
+
+        label {
+            font-weight: bold;
+        }
+
+        input, select {
+            margin-bottom: 10px;
+            padding: 5px;
+            width: 150px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: #2e7d32;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            transition: 0.3s;
+        }
+
+        button:hover {
+            background-color: #1b5e20;
+        }
+
+        #result {
+            margin-top: 20px;
+        }
+
+        .advice-box {
+            background-color: #e8f5e9;
+            border-left: 5px solid #2e7d32;
+            padding: 15px;
+            font-size: 16px;
+            line-height: 1.5;
+            max-width: 600px;
+        }
+
+        #seed-container {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+
+        .seed-card {
+            border: 1px solid #2e7d32;
+            border-radius: 8px;
+            padding: 10px 15px;
+            background-color: #e8f5e9;
+            width: 180px;
+            box-shadow: 1px 1px 5px rgba(0,0,0,0.1);
+            margin-bottom: 10px;
+            transition: transform 0.2s;
+        }
+
+        .seed-card:hover {
+            transform: scale(1.05);
+        }
+
+        .seed-card h4 {
+            margin: 0 0 5px 0;
+            font-size: 16px;
+            color: #2e7d32;
+        }
+
+        .seed-card p {
+            margin: 0 0 5px 0;
+            font-size: 14px;
+        }
+
+        .yield-label {
+            display: inline-block;
+            padding: 3px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            color: white;
+        }
+
+        .high { background-color: #388e3c; }
+        .medium { background-color: #f57c00; }
+        .premium { background-color: #1976d2; }
+    </style>
+</head>
+<body>
+    <h2>🤖 Crop Advisor AI</h2>
+
+    <label for="crop">Select Crop:</label>
+    <select id="crop">
+        <option value="Wheat">Wheat</option>
+        <option value="Rice">Rice</option>
+        <option value="Maize">Maize</option>
+        <option value="Sugarcane">Sugarcane</option>
+    </select>
+    <br><br>
+
+    <label>Nitrogen:</label>
+    <input type="number" id="Nitrogen" placeholder="e.g., 45"><br>
+    <label>Phosphorus:</label>
+    <input type="number" id="Phosphorus" placeholder="e.g., 30"><br>
+    <label>Potassium:</label>
+    <input type="number" id="Potassium" placeholder="e.g., 20"><br>
+    <label>Sulphur:</label>
+    <input type="number" id="Sulphur" placeholder="e.g., 12"><br>
+    <label>pH:</label>
+    <input type="number" step="0.1" id="pH" placeholder="e.g., 6.5"><br><br>
+
+    <button onclick="askAI()">Ask AI</button>
+
+    <h3>Advice:</h3>
+    <div id="result" class="advice-box"></div>
+
+    <h3>Recommended Seed Varieties:</h3>
+    <div id="seed-container"></div>
+
+    <script>
+        async function askAI() {
+            const soil_data = {
+                Nitrogen: parseInt(document.getElementById("Nitrogen").value),
+                Phosphorus: parseInt(document.getElementById("Phosphorus").value),
+                Potassium: parseInt(document.getElementById("Potassium").value),
+                Sulphur: parseInt(document.getElementById("Sulphur").value),
+                pH: parseFloat(document.getElementById("pH").value)
+            };
+            const crop = document.getElementById("crop").value;
+
+            try {
+                const response = await fetch("http://127.0.0.1:5000/ask", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({soil_data, crop})
+                });
+
+                const data = await response.json();
+
+                // Convert advice string to bullet points
+                const points = data.advice.split(/\d?\.\s+/).filter(p => p.trim() !== "");
+                const listHtml = "<ul>" + points.map(p => `<li>${p}</li>`).join("") + "</ul>";
+                document.getElementById("result").innerHTML = listHtml;
+
+                // Render seed varieties
+                renderSeedVarieties(data.varieties);
+            } catch (error) {
+                document.getElementById("result").innerText = "Error fetching AI advice.";
+                console.error(error);
+            }
+        }
+
+        function renderSeedVarieties(varieties) {
+            const container = document.getElementById("seed-container");
+            container.innerHTML = ""; // Clear previous cards
+
+            varieties.forEach(seed => {
+                const card = document.createElement("div");
+                card.className = "seed-card";
+
+                let yieldClass = "medium";
+                if (seed.yield.toLowerCase().includes("high")) yieldClass = "high";
+                else if (seed.yield.toLowerCase().includes("premium")) yieldClass = "premium";
+
+                card.innerHTML = `
+                    <h4>${seed.name}</h4>
+                    <p>${seed.crop}</p>
+                    <span class="yield-label ${yieldClass}">${seed.yield}</span>
+                `;
+                container.appendChild(card);
+            });
+        }
+    </script>
+</body>
+</html>

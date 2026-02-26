@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
@@ -98,7 +98,7 @@
     <div id="crop-tab" class="tab-content" style="display:none">
       <div class="card" style="background:linear-gradient(to bottom,#fafcf8,#ffffff);border-left:4px solid #2e7d32">
         <h3 style="margin-top:0;border-bottom:2px solid #2e7d32;padding-bottom:12px;color:#1a3a1a">Soil & Location Inputs</h3>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-top:12px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:12px;margin-top:12px">
           <div>
             <label>Nitrogen (kg/ha)</label>
             <input id="nitrogen" type="number" value="120" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px">
@@ -119,6 +119,21 @@
               <option value="ludhiana">Ludhiana (Punjab)</option>
             </select>
           </div>
+          <div>
+            <label>Select Crop</label>
+            <select id="seedCropSelect" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px">
+              <option value="Wheat">Wheat</option>
+              <option value="Millet">Millet</option>
+              <option value="Sunflower">Sunflower</option>
+              <option value="Cotton">Cotton</option>
+              <option value="Maize">Maize</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <button id="cropSeedPredictBtn" class="btn primary" type="button">Predict Crop & Seed</button>
+          <span id="cropSeedLoading" class="muted" style="display:none">Fetching AI recommendations...</span>
+          <span id="cropSeedError" style="display:none;color:#c62828;font-size:0.9em"></span>
         </div>
       </div>
 
@@ -131,6 +146,10 @@
           <h3 style="margin-top:0;border-bottom:2px solid #2e7d32;padding-bottom:12px;color:#1a3a1a">Recommended Seed Varieties</h3>
           <div id="seedVarieties" style="margin-top:12px"></div>
         </div>
+      </div>
+      <div class="card" style="margin-top:12px;background:#f1f8ed;border-left:4px solid #2e7d32">
+        <h3 style="margin-top:0;border-bottom:2px solid #2e7d32;padding-bottom:12px;color:#1a3a1a">Advice</h3>
+        <div id="cropAdvice" class="muted">Enter NPK values, then run prediction.</div>
       </div>
     </div>
 
